@@ -4,7 +4,7 @@ import zipfile
 import subprocess
 import argparse
 import shutil
-import xml.etree.ElementTree
+import xml.etree.ElementTree as ET
 from typing import List
 
 def run_command(command: List[str], error_message: str):
