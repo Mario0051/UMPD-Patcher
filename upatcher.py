@@ -148,24 +148,8 @@ def finalize_apk(directory: str, final_apk_name: str):
     print(f"Final APK created: {final_path}")
     print("-" * 30)
 
-def create_provider_paths(base_folder: str):
-    print("Creating FileProvider paths XML...")
-    xml_dir = os.path.join(base_folder, "res", "xml")
-    os.makedirs(xml_dir, exist_ok=True)
-    xml_path = os.path.join(xml_dir, "provider_paths.xml")
-
-    content = """<?xml version="1.0" encoding="utf-8"?>
-<paths>
-    <cache-path name="cache" path="." />
-</paths>
-"""
-    with open(xml_path, "w") as f:
-        f.write(content)
-    print(f"Created {xml_path}")
-    print("-" * 30)
-
-def add_provider_to_manifest(base_folder: str):
-    print("Modifying AndroidManifest.xml...")
+def configure_file_provider(base_folder: str):
+    print("Configuring the application's FileProvider for autoupdater...")
     manifest_path = os.path.join(base_folder, "AndroidManifest.xml")
 
     try:
@@ -179,43 +163,52 @@ def add_provider_to_manifest(base_folder: str):
     package_name = root.get('package')
     if not package_name:
         raise RuntimeError("Could not find 'package' attribute in <manifest> tag.")
-
     target_authority = f"{package_name}.provider"
-    print(f"Target authority for FileProvider will be: {target_authority}")
 
     application_tag = root.find('application')
     if application_tag is None:
         raise RuntimeError("<application> tag not found in AndroidManifest.xml")
 
-    provider_name = 'androidx.core.content.FileProvider'
+    provider_name_to_find = 'androidx.core.content.FileProvider'
+    found_provider = None
 
     for provider in application_tag.findall('provider'):
         name = provider.get('{http://schemas.android.com/apk/res/android}name')
-        authority = provider.get('{http://schemas.android.com/apk/res/android}authorities')
-        if name == provider_name and authority == target_authority:
-            print("Correct FileProvider for autoupdater already exists in manifest. Skipping.")
-            print("-" * 30)
-            return
+        if name == provider_name_to_find:
+            found_provider = provider
+            break
 
-    print("Adding FileProvider for autoupdater to manifest...")
-    provider_attribs = {
-        'android:name': provider_name,
-        'android:authorities': target_authority,
-        'android:exported': 'false',
-        'android:grantUriPermissions': 'true'
-    }
-    provider = ET.Element('provider', provider_attribs)
+    if found_provider is None:
+        raise RuntimeError(f"Could not find an existing '{provider_name_to_find}' in the manifest.")
 
-    meta_data = ET.Element('meta-data', {
-        'android:name': 'android.support.FILE_PROVIDER_PATHS',
-        'android:resource': '@xml/provider_paths'
-    })
-    provider.append(meta_data)
+    print(f"Found existing FileProvider. Overwriting its authority to '{target_authority}'")
+    found_provider.set('{http://schemas.android.com/apk/res/android}authorities', target_authority)
 
-    application_tag.append(provider)
+    found_provider.set('{http://schemas.android.com/apk/res/android}exported', 'false')
+    found_provider.set('{http://schemas.android.com/apk/res/android}grantUriPermissions', 'true')
+
+    meta_data_tag = found_provider.find('meta-data')
+    if meta_data_tag is None:
+        raise RuntimeError("The existing FileProvider is missing its required <meta-data> tag.")
+
+    xml_dir = os.path.join(base_folder, "res", "xml")
+    os.makedirs(xml_dir, exist_ok=True)
+    provider_paths_xml_path = os.path.join(xml_dir, "provider_paths.xml")
+
+    content = """<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <cache-path name="cache" path="." />
+</paths>
+"""
+    with open(provider_paths_xml_path, "w") as f:
+        f.write(content)
+    print(f"Created/overwrote '{provider_paths_xml_path}' to ensure cache path is available.")
+
+    meta_data_tag.set('{http://schemas.android.com/apk/res/android}resource', '@xml/provider_paths')
+    print("Pointed FileProvider's meta-data to '@xml/provider_paths'.")
 
     tree.write(manifest_path, encoding='utf-8', xml_declaration=True)
-    print("Successfully added FileProvider to AndroidManifest.xml")
+    print("FileProvider configuration complete!")
     print("-" * 30)
 
 def strip_split_metadata(base_folder: str):
@@ -297,8 +290,7 @@ def main():
 
         strip_split_metadata(base_decompile_dir)
 
-        create_provider_paths(base_decompile_dir)
-        add_provider_to_manifest(base_decompile_dir)
+        configure_file_provider(base_decompile_dir)
 
         modify_files(args.libmain_url, base_decompile_dir)
 
