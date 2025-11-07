@@ -181,15 +181,20 @@ def add_provider_to_manifest(base_folder: str):
         raise RuntimeError("<application> tag not found in AndroidManifest.xml")
 
     provider_name = 'androidx.core.content.FileProvider'
+    target_authority = '${applicationId}.provider'
+
     for provider in application_tag.findall('provider'):
-        if provider.get('{http://schemas.android.com/apk/res/android}name') == provider_name:
-            print("FileProvider already exists in manifest. Skipping.")
+        name = provider.get('{http://schemas.android.com/apk/res/android}name')
+        authority = provider.get('{http://schemas.android.com/apk/res/android}authorities')
+        if name == provider_name and authority == target_authority:
+            print("Correct FileProvider for autoupdater already exists in manifest. Skipping.")
             print("-" * 30)
             return
 
+    print("Adding FileProvider for autoupdater to manifest...")
     provider_attribs = {
         'android:name': provider_name,
-        'android:authorities': '${applicationId}.provider',
+        'android:authorities': target_authority,
         'android:exported': 'false',
         'android:grantUriPermissions': 'true'
     }
