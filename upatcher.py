@@ -91,6 +91,22 @@ def merge_apks(base_folder: str, split_folder: str):
     print("Merge complete!")
     print("-" * 30)
 
+def modify_files(libmain_url: str, base_decompile_folder: str):
+    print("🛠️ Modifying files...")
+
+    mod_dir = os.path.join(base_decompile_folder, "lib/arm64-v8a")
+    orig_file = os.path.join(mod_dir, "libmain.so")
+    new_orig_file = os.path.join(mod_dir, "libmain_orig.so")
+    mod_file_path = os.path.join(mod_dir, "libmain.so")
+
+    if os.path.exists(orig_file):
+        os.rename(orig_file, new_orig_file)
+        print(f"Renamed {orig_file} to {new_orig_file}")
+
+    run_command(["wget", "-q", libmain_url, "-O", mod_file_path], "Failed to download modded libmain.so")
+    print("File modification complete!")
+    print("-" * 30)
+
 def recompile_and_sign(base_folder: str, output_dir: str, keystore_path: str):
 
     print("Recompiling and signing APK...")
