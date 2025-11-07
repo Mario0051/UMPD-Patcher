@@ -4,6 +4,7 @@ import zipfile
 import subprocess
 import argparse
 import shutil
+import xml.etree.ElementTree
 from typing import List
 
 def run_command(command: List[str], error_message: str):
@@ -138,6 +139,65 @@ def finalize_apk(directory: str, final_apk_name: str):
     print(f"Final APK created: {final_path}")
     print("-" * 30)
 
+def create_provider_paths(base_folder: str):
+    print("Creating FileProvider paths XML...")
+    xml_dir = os.path.join(base_folder, "res", "xml")
+    os.makedirs(xml_dir, exist_ok=True)
+    xml_path = os.path.join(xml_dir, "provider_paths.xml")
+
+    content = """<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <cache-path name="cache" path="." />
+</paths>
+"""
+    with open(xml_path, "w") as f:
+        f.write(content)
+    print(f"Created {xml_path}")
+    print("-" * 30)
+
+def add_provider_to_manifest(base_folder: str):
+    print("Modifying AndroidManifest.xml...")
+    manifest_path = os.path.join(base_folder, "AndroidManifest.xml")
+
+    try:
+        ET.register_namespace('android', 'http://schemas.android.com/apk/res/android')
+    except AttributeError:
+        pass
+
+    tree = ET.parse(manifest_path)
+    root = tree.getroot()
+
+    application_tag = root.find('application')
+    if application_tag is None:
+        raise RuntimeError("<application> tag not found in AndroidManifest.xml")
+
+    provider_name = 'androidx.core.content.FileProvider'
+    for provider in application_tag.findall('provider'):
+        if provider.get('{http://schemas.android.com/apk/res/android}name') == provider_name:
+            print("FileProvider already exists in manifest. Skipping.")
+            print("-" * 30)
+            return
+
+    provider_attribs = {
+        'android:name': provider_name,
+        'android:authorities': '${applicationId}.provider',
+        'android:exported': 'false',
+        'android:grantUriPermissions': 'true'
+    }
+    provider = ET.Element('provider', provider_attribs)
+
+    meta_data = ET.Element('meta-data', {
+        'android:name': 'android.support.FILE_PROVIDER_PATHS',
+        'android:resource': '@xml/provider_paths'
+    })
+    provider.append(meta_data)
+
+    application_tag.append(provider)
+
+    tree.write(manifest_path, encoding='utf-8', xml_declaration=True)
+    print("Successfully added FileProvider to AndroidManifest.xml")
+    print("-" * 30)
+
 def main():
     parser = argparse.ArgumentParser(description="Patch and bundle Umamusume APKs for GitHub Actions.")
     parser.add_argument("--baseapk_dlink", type=str, required=True, help="URL to the base APK.")
@@ -153,6 +213,9 @@ def main():
         base_decompile_dir, split_decompile_dir = download_and_decompile(args.baseapk_dlink, args.splitapk_dlink)
 
         merge_apks(base_decompile_dir, split_decompile_dir)
+
+        create_provider_paths(base_decompile_dir)
+        add_provider_to_manifest(base_decompile_dir)
 
         modify_files(args.libmain_url, base_decompile_dir)
 
