@@ -176,12 +176,18 @@ def add_provider_to_manifest(base_folder: str):
     tree = ET.parse(manifest_path)
     root = tree.getroot()
 
+    package_name = root.get('package')
+    if not package_name:
+        raise RuntimeError("Could not find 'package' attribute in <manifest> tag.")
+
+    target_authority = f"{package_name}.provider"
+    print(f"Target authority for FileProvider will be: {target_authority}")
+
     application_tag = root.find('application')
     if application_tag is None:
         raise RuntimeError("<application> tag not found in AndroidManifest.xml")
 
     provider_name = 'androidx.core.content.FileProvider'
-    target_authority = '${applicationId}.provider'
 
     for provider in application_tag.findall('provider'):
         name = provider.get('{http://schemas.android.com/apk/res/android}name')
