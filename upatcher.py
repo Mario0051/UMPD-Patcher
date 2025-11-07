@@ -3,6 +3,7 @@ import re
 import zipfile
 import subprocess
 import argparse
+import shutil
 from typing import List
 
 def run_command(command: List[str], error_message: str):
@@ -36,7 +37,7 @@ def setup_environment(keystore_url: str) -> str:
     run_command(["wget", "-q", uber_signer_url, "-O", "uber-apk-signer.jar"], "Failed to download uber-apk-signer")
     keystore_filename = "debug.keystore"
     run_command(["wget", "-q", keystore_url, "-O", keystore_filename], "Failed to download debug.keystore")
-    
+
     print("Environment setup complete!")
     print("-" * 30)
     return keystore_filename
@@ -53,7 +54,6 @@ def download_and_decompile(base_apk_dlink: str, split_apk_dlink: str):
 
     run_command(["apktool", "d", "base.apk"], "Failed to decompile base APK")
     run_command(["apktool", "d", "split.apk"], "Failed to decompile split APK")
-    
 
     base_decompile_folder = "base"
     split_decompile_folder = "split"
@@ -63,16 +63,28 @@ def download_and_decompile(base_apk_dlink: str, split_apk_dlink: str):
 
     print("Decompilation complete!")
     print("-" * 30)
-    
+
     return base_decompile_folder, split_decompile_folder
 
-def modify_files(libmain_url: str, split_decompile_folder: str):
-    """
-    Renames the original file and replaces it with the modded file.
-    """
+def merge_apks(base_folder: str, split_folder: str):
+    print(f"Merging {split_folder}/lib into {base_folder}/lib...")
+
+    split_lib_dir = os.path.join(split_folder, "lib")
+    base_lib_dir = os.path.join(base_folder, "lib")
+
+    if os.path.exists(split_lib_dir):
+        shutil.copytree(split_lib_dir, base_lib_dir, dirs_exist_ok=True)
+        print("Merge complete!")
+    else:
+        print(f"Warning: {split_lib_dir} does not exist. Nothing to merge.")
+
+    print("-" * 30)
+
+def modify_files(libmain_url: str, base_decompile_folder: str):
+
     print("🛠️ Modifying files...")
 
-    mod_dir = os.path.join(split_decompile_folder, "lib/arm64-v8a")
+    mod_dir = os.path.join(base_decompile_folder, "lib/arm64-v8a")
     orig_file = os.path.join(mod_dir, "libmain.so")
     new_orig_file = os.path.join(mod_dir, "libmain_orig.so")
     mod_file_path = os.path.join(mod_dir, "libmain.so")
@@ -85,17 +97,13 @@ def modify_files(libmain_url: str, split_decompile_folder: str):
     print("File modification complete!")
     print("-" * 30)
 
-def recompile_and_sign(base_folder: str, split_folder: str, output_dir: str, keystore_path: str):
-    """
-    Recompiles and signs the modified APKs using the provided debug.keystore.
-    """
-    print("Recompiling and signing APKs...")
+def recompile_and_sign(base_folder: str, output_dir: str, keystore_path: str):
 
-    base_out_path = os.path.join(output_dir, "base_recompiled.apk")
-    split_out_path = os.path.join(output_dir, "split_recompiled.apk")
+    print("Recompiling and signing APK...")
+
+    base_out_path = os.path.join(output_dir, "umamusume_patched.apk")
 
     run_command(["apktool", "b", base_folder, "-o", base_out_path], "Failed to recompile base APK")
-    run_command(["apktool", "b", split_folder, "-o", split_out_path], "Failed to recompile split APK")
 
     if not os.path.exists(keystore_path):
         raise FileNotFoundError(f"Keystore not found: {keystore_path}")
@@ -113,55 +121,21 @@ def recompile_and_sign(base_folder: str, split_folder: str, output_dir: str, key
         "--ksKeyPass", key_pass
     ], "Failed to sign base APK with custom debug.keystore")
 
-    run_command([
-        "java", "-jar", "uber-apk-signer.jar",
-        "--apks", split_out_path,
-        "--ks", keystore_path,
-        "--ksAlias", keystore_alias,
-        "--ksPass", keystore_pass,
-        "--ksKeyPass", key_pass
-    ], "Failed to sign split APK with custom debug.keystore")
-
     print("Recompilation and signing complete!")
     print("-" * 30)
 
-def finalize_apks(directory: str):
-    """
-    Renames and moves the signed APKs to the final directory.
-    """
-    print("Finalizing APKs...")
-    
-    signed_base = os.path.join(directory, "base_recompiled-aligned-signed.apk")
-    signed_split = os.path.join(directory, "split_recompiled-aligned-signed.apk")
-    
-    final_dir = os.path.join(directory, "final")
-    os.makedirs(final_dir, exist_ok=True)
-    
-    if not os.path.exists(signed_base):
-        raise FileNotFoundError(f"Missing signed base APK: {signed_base}. Check uber-apk-signer output name.")
-    if not os.path.exists(signed_split):
-        raise FileNotFoundError(f"Missing signed split APK: {signed_split}. Check uber-apk-signer output name.")
-    
-    os.rename(signed_base, os.path.join(final_dir, "base.apk"))
-    os.rename(signed_split, os.path.join(final_dir, "config.arm64_v8a.apk"))
+def finalize_apk(directory: str, final_apk_name: str):
+    print("Finalizing APK...")
 
-    print("Finalization complete!")
-    print("-" * 30)
+    signed_apk = os.path.join(directory, "umamusume_patched-aligned-signed.apk")
 
-def create_xapk(folder_path: str, output_xapk_path: str):
-    """
-    Creates an XAPK file from a folder of APKs.
-    """
-    print("Building XAPK file...")
+    if not os.path.exists(signed_apk):
+        raise FileNotFoundError(f"Missing signed base APK: {signed_apk}. Check uber-apk-signer output name.")
 
-    with zipfile.ZipFile(output_xapk_path, 'w', zipfile.ZIP_DEFLATED) as xapk:
-        for root, _, files in os.walk(folder_path):
-            for file in files:
-                file_path = os.path.join(root, file)
-                arcname = os.path.relpath(file_path, folder_path)
-                xapk.write(file_path, arcname)
+    final_path = os.path.join(directory, final_apk_name)
+    os.rename(signed_apk, final_path)
 
-    print(f"XAPK file created: {output_xapk_path}")
+    print(f"Final APK created: {final_path}")
     print("-" * 30)
 
 def main():
@@ -172,17 +146,21 @@ def main():
     parser.add_argument("--keystore_url", type=str, required=True, help="URL to the debug keystore")
     args = parser.parse_args()
 
-    final_output_dir = "./final"
-    output_xapk_name = "umamusume.xapk"
+    final_apk_name = "umamusume.apk"
 
     try:
         keystore_path = setup_environment(args.keystore_url)
         base_decompile_dir, split_decompile_dir = download_and_decompile(args.baseapk_dlink, args.splitapk_dlink)
-        modify_files(args.libmain_url, split_decompile_dir)
-        recompile_and_sign(base_decompile_dir, split_decompile_dir, ".", keystore_path)
-        finalize_apks(".")
-        create_xapk(final_output_dir, output_xapk_name)
-        print("Process complete! The patched XAPK is ready.")
+
+        merge_apks(base_decompile_dir, split_decompile_dir)
+
+        modify_files(args.libmain_url, base_decompile_dir)
+
+        recompile_and_sign(base_decompile_dir, ".", keystore_path)
+
+        finalize_apk(".", final_apk_name)
+
+        print(f"Process complete! The patched APK '{final_apk_name}' is ready.")
     except Exception as e:
         print(f"An error occurred: {e}")
         exit(1)
