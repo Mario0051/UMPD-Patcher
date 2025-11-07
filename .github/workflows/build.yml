@@ -1,28 +1,10 @@
 name: UMAPATCHER
 
 on:
+  repository_dispatch:
+    types: [build-patch]
+
   workflow_dispatch:
-    inputs:
-      base_apk_url:
-        description: 'Base APK Download URL'
-        required: true
-        default: ''
-      split_apk_url:
-        description: 'Split APK Download URL (arm64-v8a)'
-        required: true
-        default: ''
-      libmain_so_url:
-        description: 'libmain.so Patch URL'
-        required: true
-        default: 'https://github.com/kairusds/Hachimi-Edge/releases/latest/download/libmain-arm64-v8a.so'
-      keystore_url:
-        description: 'Debug keystore URL'
-        required: true
-        default: 'https://github.com/kairusds/UmaPatcher-Edge/raw/refs/heads/main/app/debug.keystore'
-      apk_version:
-        description: 'Original APK Version (e.g., 2.2.0)'
-        required: true
-        default: ''
 
 jobs:
   build:
@@ -37,52 +19,64 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
 
-      
-      - name: Extract libmain.so Version
+      - name: Fetch and Parse Update Data
+        id: get_data
+        run: |
+          JSON_DATA=$(curl -s "${{ secrets.QOOAPP_JSON_URL }}")
+
+          echo "BASE_APK_URL=$(echo $JSON_DATA | jq -r '.data.download')" >> $GITHUB_ENV
+          echo "SPLIT_APK_URL=$(echo $JSON_DATA | jq -r '.data.split_apks[0].url')" >> $GITHUB_ENV
+          echo "APK_VERSION=$(echo $JSON_DATA | jq -r '.data.apk.version_name')" >> $GITHUB_ENV
+
+      - name: Set Default URLs and Extract libmain Version
         id: extract_version
         run: |
-          URL="${{ github.event.inputs.libmain_so_url }}"
+          URL="${{ secrets.LIBMAIN_SO_URL }}"
+
+          echo "KEYSTORE_URL=https://github.com/kairusds/UmaPatcher-Edge/raw/refs/heads/main/app/debug.keystore" >> $GITHUB_ENV
+          echo "LIBMAIN_SO_URL=$URL" >> $GITHUB_ENV
+
           USERNAME=$(echo "$URL" | grep -oP 'github\.com/\K[^/]+')
           REPO=$(echo "$URL" | grep -oP 'github\.com/[^/]+/\K[^/]+')
-          
+
           # Get the tag of the latest release from the GitHub API
+
           if echo "$URL" | grep -q "/latest/download/"; then
             VERSION=$(curl -s "https://api.github.com/repos/$USERNAME/$REPO/releases/latest" | jq -r '.tag_name')
           else
             VERSION=$(echo "$URL" | grep -oP 'releases/download/\K[^/]+')
           fi
-          
+
           echo "LIBMAIN_VERSION=$VERSION" >> $GITHUB_ENV
-          echo "LIBMAIN_USER=$USERNAME" >> $GITHUB_ENV
 
       - name: Run UMAPATCHER Script
         run: |
           python upatcher.py \
-            --baseapk_dlink ${{ github.event.inputs.base_apk_url }} \
-            --splitapk_dlink ${{ github.event.inputs.split_apk_url }} \
-            --libmain_url ${{ github.event.inputs.libmain_so_url }} \
-            --keystore_url ${{ github.event.inputs.keystore_url }}
+            --baseapk_dlink ${{ env.BASE_APK_URL }} \
+            --splitapk_dlink ${{ env.SPLIT_APK_URL }} \
+            --libmain_url ${{ env.LIBMAIN_SO_URL }} \
+            --keystore_url ${{ env.KEYSTORE_URL }}
 
       - name: Upload Patched XAPK to Release
         uses: softprops/action-gh-release@v2
         with:
           files: umamusume.xapk
-          tag_name: v${{ github.event.inputs.apk_version }}
+          tag_name: v${{ env.APK_VERSION }}
           body: |
             This is an automatic release of the patched Umamusume XAPK.
-            
-            APK Version: **${{ github.event.inputs.apk_version }}**
-            
-            - Patched with the latest `libmain.so` from **${{ env.LIBMAIN_USER }}**, version **${{ env.LIBMAIN_VERSION }}**.
-            - Supports Arm64-v8a architecture.
-            
-            **Sources:**
-            - Base APK: [Download](${{ github.event.inputs.base_apk_url }})
-            - Split APK (arm64-v8a): [Download](${{ github.event.inputs.split_apk_url }})
-            - Patched libmain.so: [Download](${{ github.event.inputs.libmain_so_url }})
-            - Keystore: [Download](${{ github.event.inputs.keystore_url }})
 
-      - name: Upload Patched XAPK
+            APK Version: **${{ env.APK_VERSION }}**
+
+            - Patched with the latest `libmain.so` from my fork, version **${{ env.LIBMAIN_VERSION }}**.
+            - Supports Arm64-v8a architecture.
+
+            **Sources:**
+            - Base APK: [Download](${{ env.BASE_APK_URL }})
+            - Split APK (arm64-v8a): [Download](${{ env.SPLIT_APK_URL }})
+            - Patched libmain.so: [Download](${{ env.LIBMAIN_SO_URL }})
+            - Keystore: [Download](${{ env.KEYSTORE_URL }})
+
+      - name: Upload Patched XAPK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: uma-xapk-patch
