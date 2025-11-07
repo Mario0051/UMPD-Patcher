@@ -57,13 +57,13 @@ jobs:
             --libmain_url ${{ env.LIBMAIN_SO_URL }} \
             --keystore_url ${{ env.KEYSTORE_URL }}
 
-      - name: Upload Patched XAPK to Release
+      - name: Upload Patched APK to Release
         uses: softprops/action-gh-release@v2
         with:
-          files: umamusume.xapk
+          files: umamusume.apk
           tag_name: v${{ env.APK_VERSION }}
           body: |
-            This is an automatic release of the patched Umamusume XAPK.
+            This is an automatic release of the patched Umamusume APK.
 
             APK Version: **${{ env.APK_VERSION }}**
 
@@ -76,8 +76,8 @@ jobs:
             - Patched libmain.so: [Download](${{ env.LIBMAIN_SO_URL }})
             - Keystore: [Download](${{ env.KEYSTORE_URL }})
 
-      - name: Upload Patched XAPK Artifact
+      - name: Upload Patched APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: uma-xapk-patch
-          path: umamusume.xapk
+          name: uma-apk-patch
+          path: umamusume.apk
