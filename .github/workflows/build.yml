@@ -61,7 +61,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: umamusume.apk
-          tag_name: v${{ env.LIBMAIN_VERSION }}
+          tag_name: ${{ env.LIBMAIN_VERSION }}
           body: |
             This is an automatic release of the patched Umamusume APK.
 
