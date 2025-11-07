@@ -164,6 +164,54 @@ def create_provider_paths(base_folder: str):
     print(f"Created {xml_path}")
     print("-" * 30)
 
+def add_provider_to_manifest(base_folder: str):
+    print("Modifying AndroidManifest.xml...")
+    manifest_path = os.path.join(base_folder, "AndroidManifest.xml")
+
+    try:
+        ET.register_namespace('android', 'http://schemas.android.com/apk/res/android')
+    except AttributeError:
+        pass
+
+    tree = ET.parse(manifest_path)
+    root = tree.getroot()
+
+    application_tag = root.find('application')
+    if application_tag is None:
+        raise RuntimeError("<application> tag not found in AndroidManifest.xml")
+
+    provider_name = 'androidx.core.content.FileProvider'
+    target_authority = '${applicationId}.provider'
+
+    for provider in application_tag.findall('provider'):
+        name = provider.get('{http://schemas.android.com/apk/res/android}name')
+        authority = provider.get('{http://schemas.android.com/apk/res/android}authorities')
+        if name == provider_name and authority == target_authority:
+            print("Correct FileProvider for autoupdater already exists in manifest. Skipping.")
+            print("-" * 30)
+            return
+
+    print("Adding FileProvider for autoupdater to manifest...")
+    provider_attribs = {
+        'android:name': provider_name,
+        'android:authorities': target_authority,
+        'android:exported': 'false',
+        'android:grantUriPermissions': 'true'
+    }
+    provider = ET.Element('provider', provider_attribs)
+
+    meta_data = ET.Element('meta-data', {
+        'android:name': 'android.support.FILE_PROVIDER_PATHS',
+        'android:resource': '@xml/provider_paths'
+    })
+    provider.append(meta_data)
+
+    application_tag.append(provider)
+
+    tree.write(manifest_path, encoding='utf-8', xml_declaration=True)
+    print("Successfully added FileProvider to AndroidManifest.xml")
+    print("-" * 30)
+
 def strip_split_metadata(base_folder: str):
     print("Stripping split-related metadata from AndroidManifest.xml...")
     manifest_path = os.path.join(base_folder, "AndroidManifest.xml")
@@ -190,54 +238,6 @@ def strip_split_metadata(base_folder: str):
         print(f"Adding permission: '{permission_name}'")
         new_permission = ET.Element('uses-permission', {f'{NS_ANDROID}name': permission_name})
         root.insert(1, new_permission)
-
-    manifest_attrs_to_remove = [
-        'requiredSplitTypes',
-        'splitTypes'
-    ]
-    for attr in manifest_attrs_to_remove:
-        attr_key = f'{NS_ANDROID}{attr}'
-        if attr_key in root.attrib:
-            del root.attrib[attr_key]
-            print(f"  - Removed attribute '{attr}' from <manifest> tag.")
-
-    application_tag = root.find('application')
-    if application_tag is None:
-        raise RuntimeError("<application> tag not found in AndroidManifest.xml")
-
-    meta_data_to_remove = [
-        'com.android.vending.splits',
-        'com.android.vending.splits.required',
-        'com.google.android.play.core.splitcompat.REQUIRED',
-    ]
-
-    for meta_data in application_tag.findall('meta-data'):
-        name = meta_data.get(f'{NS_ANDROID}name')
-        if name in meta_data_to_remove:
-            print(f"  - Removing meta-data: {name}")
-            application_tag.remove(meta_data)
-
-    if 'split' in application_tag.attrib:
-        del application_tag.attrib['split']
-        print("  - Removed 'split' attribute from <application> tag.")
-
-    tree.write(manifest_path, encoding='utf-8', xml_declaration=True)
-    print("Manifest cleanup complete!")
-    print("-" * 30)
-
-def strip_split_metadata(base_folder: str):
-    print("Stripping split-related metadata from AndroidManifest.xml...")
-    manifest_path = os.path.join(base_folder, "AndroidManifest.xml")
-
-    try:
-        ET.register_namespace('android', 'http://schemas.android.com/apk/res/android')
-    except AttributeError:
-        pass
-
-    tree = ET.parse(manifest_path)
-    root = tree.getroot()
-
-    NS_ANDROID = '{http://schemas.android.com/apk/res/android}'
 
     manifest_attrs_to_remove = [
         'requiredSplitTypes',
