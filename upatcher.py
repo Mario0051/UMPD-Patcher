@@ -198,6 +198,44 @@ def add_provider_to_manifest(base_folder: str):
     print("Successfully added FileProvider to AndroidManifest.xml")
     print("-" * 30)
 
+def strip_split_metadata(base_folder: str):
+    print("Stripping split-related metadata from AndroidManifest.xml...")
+    manifest_path = os.path.join(base_folder, "AndroidManifest.xml")
+
+    try:
+        ET.register_namespace('android', 'http://schemas.android.com/apk/res/android')
+    except AttributeError:
+        pass
+
+    tree = ET.parse(manifest_path)
+    root = tree.getroot()
+    application_tag = root.find('application')
+
+    if application_tag is None:
+        raise RuntimeError("<application> tag not found in AndroidManifest.xml")
+
+    NS_ANDROID = '{http://schemas.android.com/apk/res/android}'
+
+    meta_data_to_remove = [
+        'com.android.vending.splits',
+        'com.android.vending.splits.required',
+        'com.google.android.play.core.splitcompat.REQUIRED',
+    ]
+
+    for meta_data in application_tag.findall('meta-data'):
+        name = meta_data.get(f'{NS_ANDROID}name')
+        if name in meta_data_to_remove:
+            print(f"  - Removing meta-data: {name}")
+            application_tag.remove(meta_data)
+
+    if 'split' in application_tag.attrib:
+        del application_tag.attrib['split']
+        print("  - Removed 'split' attribute from <application> tag.")
+
+    tree.write(manifest_path, encoding='utf-8', xml_declaration=True)
+    print("Manifest cleanup complete!")
+    print("-" * 30)
+
 def main():
     parser = argparse.ArgumentParser(description="Patch and bundle Umamusume APKs for GitHub Actions.")
     parser.add_argument("--baseapk_dlink", type=str, required=True, help="URL to the base APK.")
@@ -213,6 +251,8 @@ def main():
         base_decompile_dir, split_decompile_dir = download_and_decompile(args.baseapk_dlink, args.splitapk_dlink)
 
         merge_apks(base_decompile_dir, split_decompile_dir)
+
+        strip_split_metadata(base_decompile_dir)
 
         create_provider_paths(base_decompile_dir)
         add_provider_to_manifest(base_decompile_dir)
