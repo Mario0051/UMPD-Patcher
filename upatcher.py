@@ -68,34 +68,27 @@ def download_and_decompile(base_apk_dlink: str, split_apk_dlink: str):
     return base_decompile_folder, split_decompile_folder
 
 def merge_apks(base_folder: str, split_folder: str):
-    print(f"Merging {split_folder}/lib into {base_folder}/lib...")
+    print(f"Merging contents from {split_folder} into {base_folder}...")
 
-    split_lib_dir = os.path.join(split_folder, "lib")
-    base_lib_dir = os.path.join(base_folder, "lib")
+    dirs_to_merge = ['lib', 'res', 'assets']
 
-    if os.path.exists(split_lib_dir):
-        shutil.copytree(split_lib_dir, base_lib_dir, dirs_exist_ok=True)
-        print("Merge complete!")
-    else:
-        print(f"Warning: {split_lib_dir} does not exist. Nothing to merge.")
+    for item in os.listdir(split_folder):
+        if item.startswith('smali'):
+            dirs_to_merge.append(item)
 
-    print("-" * 30)
+    dirs_to_merge = list(set(dirs_to_merge))
 
-def modify_files(libmain_url: str, base_decompile_folder: str):
+    for dir_name in dirs_to_merge:
+        split_dir = os.path.join(split_folder, dir_name)
+        base_dir = os.path.join(base_folder, dir_name)
 
-    print("🛠️ Modifying files...")
+        if os.path.exists(split_dir):
+            print(f"  - Merging directory: {dir_name}")
+            shutil.copytree(split_dir, base_dir, dirs_exist_ok=True)
+        else:
+            print(f"  - Directory '{dir_name}' not found in split, skipping.")
 
-    mod_dir = os.path.join(base_decompile_folder, "lib/arm64-v8a")
-    orig_file = os.path.join(mod_dir, "libmain.so")
-    new_orig_file = os.path.join(mod_dir, "libmain_orig.so")
-    mod_file_path = os.path.join(mod_dir, "libmain.so")
-
-    if os.path.exists(orig_file):
-        os.rename(orig_file, new_orig_file)
-        print(f"Renamed {orig_file} to {new_orig_file}")
-
-    run_command(["wget", "-q", libmain_url, "-O", mod_file_path], "Failed to download modded libmain.so")
-    print("File modification complete!")
+    print("Merge complete!")
     print("-" * 30)
 
 def recompile_and_sign(base_folder: str, output_dir: str, keystore_path: str):
@@ -209,12 +202,22 @@ def strip_split_metadata(base_folder: str):
 
     tree = ET.parse(manifest_path)
     root = tree.getroot()
-    application_tag = root.find('application')
-
-    if application_tag is None:
-        raise RuntimeError("<application> tag not found in AndroidManifest.xml")
 
     NS_ANDROID = '{http://schemas.android.com/apk/res/android}'
+
+    manifest_attrs_to_remove = [
+        'requiredSplitTypes',
+        'splitTypes'
+    ]
+    for attr in manifest_attrs_to_remove:
+        attr_key = f'{NS_ANDROID}{attr}'
+        if attr_key in root.attrib:
+            del root.attrib[attr_key]
+            print(f"  - Removed attribute '{attr}' from <manifest> tag.")
+
+    application_tag = root.find('application')
+    if application_tag is None:
+        raise RuntimeError("<application> tag not found in AndroidManifest.xml")
 
     meta_data_to_remove = [
         'com.android.vending.splits',
