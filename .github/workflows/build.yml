@@ -69,7 +69,7 @@ jobs:
           files: |
             umamusume.apk
             blake3.json
-          tag_name: ${{ env.VERSION }}
+          tag_name: ${{ env.LIBMAIN_VERSION }}
           body: |
             This is an automatic release of the patched Umamusume APK.
 
