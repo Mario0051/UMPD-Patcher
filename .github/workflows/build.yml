@@ -57,10 +57,18 @@ jobs:
             --libmain_url ${{ env.LIBMAIN_SO_URL }} \
             --keystore_url ${{ env.KEYSTORE_URL }}
 
+      - name: Generate BLAKE3 Checksum
+        run: |
+          sudo apt-get update && sudo apt-get install -y b3sum
+          HASH=$(b3sum umamusume.apk | awk '{print $1}')
+          echo "{\"umamusume.apk\": \"$HASH\"}" > blake3.json
+
       - name: Upload Patched APK to Release
         uses: softprops/action-gh-release@v2
         with:
-          files: umamusume.apk
+          files: |
+            umamusume.apk
+            blake3.json
           tag_name: ${{ env.LIBMAIN_VERSION }}
           body: |
             This is an automatic release of the patched Umamusume APK.
