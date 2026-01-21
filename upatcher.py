@@ -27,7 +27,7 @@ def setup_environment(keystore_url: str) -> str:
     run_command(["sudo", "apt-get", "update"], "Failed to update apt")
     run_command(["sudo", "apt-get", "install", "openjdk-8-jre-headless", "-y"], "Failed to install OpenJDK 8")
     apktool_url = "https://raw.githubusercontent.com/iBotPeaches/Apktool/master/scripts/linux/apktool"
-    apktool_jar_url = "https://bitbucket.org/iBotPeaches/apktool/downloads/apktool_2.9.3.jar"
+    apktool_jar_url = "https://github.com/iBotPeaches/Apktool/releases/download/v2.9.3/apktool_2.9.3.jar"
     run_command(["wget", "-q", apktool_url, "-O", "apktool"], "Failed to download apktool script")
     run_command(["wget", "-q", apktool_jar_url, "-O", "apktool.jar"], "Failed to download apktool JAR")
     os.makedirs("/usr/local/bin", exist_ok=True)
